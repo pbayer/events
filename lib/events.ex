@@ -1,6 +1,8 @@
 defmodule Events do
   @moduledoc """
-  Documentation for `Events`.
+  # `Events`
+
+  A discrete events simulator in Elixir.
   """
 
   @doc """

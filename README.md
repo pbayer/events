@@ -1,6 +1,6 @@
 # Events
 
-**TODO: Add description**
+Discrete event simulation in Elixir. 
 
 ## Installation
 
