@@ -2,65 +2,89 @@ defmodule Events.PQ do
   @moduledoc """
   `Events.PQ` describes event handling with a priority queue.
 
-  An event is a `%Events.PQ` map containing
+  An event is a map containing
 
-  - an execution time and
-  - a function to call at that time.
+  - `t :: number`: an execution time,
+  - `f :: fun`: a function to call at that time,
+  - `c :: number`: a cycle time for repeated events.
+
+  An event gets registered in a map with a serial number key and
+  can be changed or deleted with that key.
 
   Events are hold in a priority search queue. An event's priority
-  is determined by its time. Events with lower time are executed
-  first.
+  is determined by its time `t`. Events with lower time are
+  executed first.
   """
-  defstruct t: 0.0, f: nil
-  @type evt :: %Events.PQ{t: float, f: fun}
+  defstruct t: 0, f: nil, c: nil
+  @type ev :: %__MODULE__{t: number, f: fun, c: number}
+
+  alias __MODULE__, as: PQ
+
   @resolution 1000
 
-  @doc "Create a new event queue (priority search queue)."
-  @spec new() :: :psq.psq
-  def new(), do: :psq.new()
+  @doc "Create a new event queue."
+  @spec new() :: %{no: non_neg_integer, evts: map, psq: :psq.psq}
+  def new(), do: %{no: 0, evts: %{}, psq: :psq.new()}
 
-  @doc "Add a new event `ev` to an event queue `psq`."
-  @spec add(evt, :psq.psq) :: :psq.psq
-  def add(ev, psq) do
-    kp = trunc(ev.t*@resolution)
-    {:ok, psq2} = :psq.alter(fn mv -> update(mv, kp, ev) end, kp, psq)
-    psq2
-  end
+  @doc """
+  Insert a new event into an event queue and return it.
 
-  defp update(:nothing, prio, ev) do
-    {:ok, {:just, {prio, [ev]}}}
-  end
-  defp update({:just, {_, evts}}, prio, ev) do
-    {:ok, {:just, {prio, evts ++ [ev]}}}
+  - `f: fun`: function to execute,
+  - `t: number`: event time,
+  - `c: number`: cycle time for a repeating event, `nil` otherwise,
+  - `eq: map`: event queue.
+  """
+  def add(f, t, c, eq) do
+    n = eq.no+1
+    ev = %PQ{t: t, f: f, c: c}
+    %{eq | no: n, evts: Map.put(eq.evts, n, ev), psq: add_psq(n, t, eq.psq)}
   end
 
   @doc """
-  Execute the next event and remove it from the `psq` queue.
-  Return a tuple of the event's time and the updated `psq`.
+  Update event number `no`.
   """
-  @spec next(:psq.psq) :: {number, :psq.psq}
-  def next(psq) do
-    case :psq.find_min(psq) do
-      {:just, {_, _, evts}} -> exec_1st_event(evts, psq)
-      :nothing              -> {nil, psq}
+  def update(no, :cycle, cy, eq), do: update_eq(no, :c, cy, eq)
+
+  defp update_eq(no, key, value, eq) do
+    %{no: _, evts: evts, psq: _} = eq
+    case Map.get(evts, no) do
+      nil -> eq
+      ev ->
+        ev = Map.update!(ev, key, fn _ -> value end)
+        %{eq | evts: Map.update!(evts, no, fn _ -> ev end)}
     end
   end
 
-  defp exec_1st_event( [ev], psq) do
-    psq = :psq.delete_min(psq)
-    exec_1st_event(ev, psq)
-  end
-  defp exec_1st_event( [ev, _], psq) do
-    {:ok, psq} = :psq.alter_min(&delete_1st/1, psq)
-    exec_1st_event(ev, psq)
-  end
-  defp exec_1st_event( ev, psq) do
-    ev.f.()
-    {ev.t, psq}
+  defp add_psq(n, t, psq) do
+    kp = trunc(t*@resolution)
+    {:ok, psq2} = :psq.alter(fn mv -> update_psq(mv, kp, n, t) end, kp, psq)
+    psq2
   end
 
-  defp delete_1st({:just, {k, p, [_ | t]}}) do
-    {:ok, {:just, {k, p, t}}}
+  defp update_psq(:nothing, prio, n, t) do
+    {:ok, {:just, {prio, %{t: t, ens: [n]}}}}
+  end
+  defp update_psq({:just, {_, ev}}, prio, n, _) do
+    {:ok, {:just, {prio, %{ev | ens: ev.ens ++ [n]}}}}
+  end
+
+  @doc """
+  Execute the next event with argument `arg` and remove it from
+  the `psq` queue. Return a tuple of
+  - the event's time,
+  - the number of executed functions and
+  - the updated `psq`.
+  """
+  @spec next(pid, :psq.psq) :: {number, integer, :psq.psq}
+  def next(arg, psq) do
+    case :psq.find_min(psq) do
+      {:just, {_, _, ev}} ->
+        Enum.each(ev.ens, fn x -> x.(arg) end)
+        psq = :psq.delete_min(psq)
+        {ev.t, length(ev.ens), psq}
+      :nothing ->
+        {nil, 0, psq}
+    end
   end
 
 end
