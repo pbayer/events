@@ -4,13 +4,14 @@ defmodule Events.MixProject do
   def project do
     [
       app: :events,
+      test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
         coveralls: :test,
         "coveralls.detail": :test,
         "coveralls.post": :test,
-        "coveralls.html": :test
+        "coveralls.html": :test,
+        "coveralls.github": :test
       ],
-      test_coverage: [tool: ExCoveralls],
       dialyzer: [plt_add_deps: :transitive],
       version: "0.1.0",
       elixir: "~> 1.11",
@@ -47,7 +48,7 @@ defmodule Events.MixProject do
       {:erlang_psq, "~> 1.0"},
       {:credo, "~> 0.8.8", only: [:dev], runtime: false},
       {:dialyxir, "~> 0.5", only: [:dev], runtime: false},
-      {:excoveralls, "~> 0.7.4", only: [:test], runtime: false},
+      {:excoveralls, "~> 0.10", only: :test},
       {:ex_doc, "~> 0.18", only: [:dev], runtime: false}
     ]
   end
