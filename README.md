@@ -2,6 +2,8 @@
 
 Discrete event simulation framework in Elixir.
 
+[![Elixir CI](https://github.com/pbayer/events/actions/workflows/ci.yml/badge.svg)](https://github.com/pbayer/events/actions/workflows/ci.yml)
+
 With Elixir an actor language based on the [BEAM (Erlang virtual machine)](https://en.wikipedia.org/wiki/BEAM_(Erlang_virtual_machine)) it can handle thousands of concurrent entities in a simulation.
 
 ## Installation
