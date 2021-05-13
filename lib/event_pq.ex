@@ -18,37 +18,66 @@ defmodule Events.PQ do
   defstruct t: 0, f: nil, c: nil
   @type ev :: %__MODULE__{t: number, f: fun, c: number}
 
+  @typedoc """
+  An `events`-map has event numbers as keys and an `ev`-struct value.
+  """
+  @type events :: %{pos_integer => ev}
+
+  @typedoc """
+  An `event_queue` is a map of
+
+  - `:no`: number of last added event,
+  - `:evts`: an events map with an entry for each active event,
+  - `:psq`: a priority search queue where events get scheduled
+    according to their time `t`.
+  """
+  @type event_queue :: %{
+          no: non_neg_integer,
+          evts: events,
+          psq: :psq.psq()
+        }
+
   alias __MODULE__, as: PQ
 
   @resolution 1000
 
-  @doc "Create a new event queue."
-  @spec new() :: %{no: non_neg_integer, evts: map, psq: :psq.psq}
-  def new(), do: %{no: 0, evts: %{}, psq: :psq.new()}
+  @doc """
+  Create a new event queue.
+  """
+  @spec new :: event_queue
+  def new, do: %{no: 0, evts: %{}, psq: :psq.new()}
 
   @doc """
-  Insert a new event into an event queue and return it.
-
+  Insert a new event into an event queue and schedule it with
   - `f: fun`: function to execute,
   - `t: number`: event time,
   - `c: number`: cycle time for a repeating event, `nil` otherwise,
   - `eq: map`: event queue.
+
+  Note: You can extract the generated event number as the
+  `eq.no`-field of the returned event queue `eq`.
   """
   def add(f, t, c, eq) do
-    n = eq.no+1
+    n = eq.no + 1
     ev = %PQ{t: t, f: f, c: c}
     %{eq | no: n, evts: Map.put(eq.evts, n, ev), psq: add_psq(n, t, eq.psq)}
   end
 
   @doc """
-  Update event number `no`.
+  Update event number `no` with
+
+  - `:cycle`: update the event repeat cycle,
   """
+  @spec update(non_neg_integer, atom, number, map) :: map
   def update(no, :cycle, cy, eq), do: update_eq(no, :c, cy, eq)
 
   defp update_eq(no, key, value, eq) do
     %{no: _, evts: evts, psq: _} = eq
+
     case Map.get(evts, no) do
-      nil -> eq
+      nil ->
+        eq
+
       ev ->
         ev = Map.update!(ev, key, fn _ -> value end)
         %{eq | evts: Map.update!(evts, no, fn _ -> ev end)}
@@ -56,7 +85,7 @@ defmodule Events.PQ do
   end
 
   defp add_psq(n, t, psq) do
-    kp = trunc(t*@resolution)
+    kp = trunc(t * @resolution)
     {:ok, psq2} = :psq.alter(fn mv -> update_psq(mv, kp, n, t) end, kp, psq)
     psq2
   end
@@ -64,27 +93,56 @@ defmodule Events.PQ do
   defp update_psq(:nothing, prio, n, t) do
     {:ok, {:just, {prio, %{t: t, ens: [n]}}}}
   end
+
   defp update_psq({:just, {_, ev}}, prio, n, _) do
     {:ok, {:just, {prio, %{ev | ens: ev.ens ++ [n]}}}}
   end
 
+  @doc "Delete event/s `n`/`ns` from the events list"
+  @spec delete(integer, map) :: map
+  def delete(n, eq) when is_integer(n) do
+    %{eq | evts: Map.drop(eq.evts, [n])}
+  end
+
+  @spec delete(list, map) :: map
+  def delete(ns, eq) when is_list(ns) do
+    %{eq | evts: Map.drop(eq.evts, ns)}
+  end
+
   @doc """
-  Execute the next event with argument `arg` and remove it from
-  the `psq` queue. Return a tuple of
-  - the event's time,
-  - the number of executed functions and
-  - the updated `psq`.
+  Extract the events for the next time increment and either
+  - remove them from the event list and queue or
+  - schedule repeat events if an event's cycle `:c` is > 0.
+
+  Return a tuple of
+  - the event time,
+  - a list of functions to execute,
+  - the updated event queue.
   """
-  @spec next(pid, :psq.psq) :: {number, integer, :psq.psq}
-  def next(arg, psq) do
+  @spec next(event_queue) :: {number, list, map}
+  def next(%{no: no, evts: evts, psq: psq}) do
     case :psq.find_min(psq) do
       {:just, {_, _, ev}} ->
-        Enum.each(ev.ens, fn x -> x.(arg) end)
+        # intersection
+        evs = ev.ens -- ev.ens -- Map.keys(evts)
+        # functions to execute
+        flist = Enum.map(evs, fn n -> evts[n].f end)
+        # cyclic events
+        evc = Enum.filter(evs, fn n -> evts[n].c end)
+        psq = reschedule_cyclic(evc, psq, evts, ev.t)
+        # drop others
+        evts = Map.drop(evts, evs -- evc)
+        # delete
         psq = :psq.delete_min(psq)
-        {ev.t, length(ev.ens), psq}
+        {ev.t, flist, %{no: no, evts: evts, psq: psq}}
+
       :nothing ->
-        {nil, 0, psq}
+        {nil, [], %{no: no, evts: evts, psq: psq}}
     end
   end
 
+  # reschedule cyclic events
+  defp reschedule_cyclic(ns, psq, evts, t) do
+    Enum.reduce(ns, psq, fn n, pq -> add_psq(n, t + evts[n].c, pq) end)
+  end
 end

@@ -1,6 +1,8 @@
 # Events
 
-Discrete event simulation in Elixir. 
+Discrete event simulation framework in Elixir.
+
+With Elixir an actor language based on the [BEAM (Erlang virtual machine)](https://en.wikipedia.org/wiki/BEAM_(Erlang_virtual_machine)) it can handle thousands of concurrent entities in a simulation.
 
 ## Installation
 
