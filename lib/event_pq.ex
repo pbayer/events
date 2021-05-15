@@ -137,7 +137,7 @@ defmodule Events.PQ do
         {ev.t, flist, %{no: no, evts: evts, psq: psq}}
 
       :nothing ->
-        {nil, [], %{no: no, evts: evts, psq: psq}}
+        {-9999, [], %{no: no, evts: evts, psq: psq}}
     end
   end
 

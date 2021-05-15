@@ -56,13 +56,23 @@ defmodule Events.Clock do
     end
   end
 
+  @doc "Tell an idle clock `clk` to take one step forward in time."
+  @spec step(pid) :: {:ok, map}
+  def step(clk) do
+    send(clk, {:step, self()})
+
+    receive do
+      {:ok, _} = msg -> msg
+    end
+  end
+
   @doc "Run a clock `clk` synchronously for a time `t`."
   @spec run(pid, number) :: {:done, map}
   def run(clk, t) do
     _run(clk, t)
 
     receive do
-      {:done, msg} -> msg
+      {:done, _} = msg -> msg
     end
   end
 
@@ -95,6 +105,16 @@ defmodule Events.Clock do
   @doc "Query a clock for an `item` to send it back to `self()`."
   def _query(clk, item), do: send(clk, {:query, self(), item})
 
+  @doc "Reset a clock `clk`."
+  def reset(clk, t0 \\ 0) do
+    send(clk, {:reset, self(), t0})
+
+    receive do
+      {:ok} -> :ok
+      msg -> msg
+    end
+  end
+
   def idle_clock(t, eq, s) do
     receive do
       {:event, client, evt} ->
@@ -107,6 +127,7 @@ defmodule Events.Clock do
         idle_clock(t, eq, s)
 
       {:run, client, tr} ->
+        t0 = t
         {t, fs, eq} = PQ.next(eq)
         next_event(fs)
 
@@ -114,7 +135,7 @@ defmodule Events.Clock do
           s
           | evcount: length(fs),
             state: :running,
-            tend: t + tr,
+            tend: t0 + tr,
             client: client
         })
 
@@ -127,6 +148,15 @@ defmodule Events.Clock do
           | evcount: s.evcount + length(fs),
             client: client
         })
+
+      {:reset, client, t0} ->
+        send(client, {:ok})
+
+        idle_clock(
+          t0,
+          PQ.new(),
+          %{evcount: 0, state: :idle, tend: t0, client: client}
+        )
 
       {:next, _} ->
         handle_next(t, eq, s)
@@ -160,9 +190,18 @@ defmodule Events.Clock do
     end
   end
 
+  defp next_event([]), do: []
+
   defp next_event(fs) do
     clk = self()
     Task.start_link(fn -> exec_events(fs, clk) end)
+  end
+
+  defp exec_events([f], clk), do: send(clk, {:next, [f.(clk)]})
+
+  defp exec_events(fs, clk) do
+    tasks = Enum.map(fs, fn f -> Task.async(fn -> f.(clk) end) end)
+    send(clk, {:next, Task.await_many(tasks)})
   end
 
   defp handle_next(t, eq, %{state: :stopped} = s) do
@@ -175,22 +214,18 @@ defmodule Events.Clock do
     idle_clock(t, eq, s)
   end
 
-  defp handle_next(_, eq, s) do
-    {t, fs, eq} = PQ.next(eq)
-    next_event(fs)
-    evcount = s.evcount + length(fs)
-
+  defp handle_next(t, eq, s) do
     if t >= s.tend || eq.psq == nil do
-      t = tadjust(s.tend, t)
-      send(s.client, {:done, %{events: evcount, time: t}})
-      idle_clock(t, eq, %{s | state: :idle, evcount: evcount})
+      t = max(s.tend, t)
+      send(s.client, {:done, %{events: s.evcount, time: t}})
+      idle_clock(t, eq, %{s | state: :idle})
     else
+      {t, fs, eq} = PQ.next(eq)
+      next_event(fs)
+      evcount = s.evcount + length(fs)
       running_clock(t, eq, %{s | evcount: evcount})
     end
   end
-
-  defp tadjust(t1, nil), do: t1
-  defp tadjust(t1, t2), do: max(t1, t2)
 
   defp add_event({f, :at, te, cy}, _, eq), do: PQ.add(f, te, cy, eq)
   defp add_event({f, :after, te, cy}, t, eq), do: PQ.add(f, t + te, cy, eq)
@@ -198,12 +233,4 @@ defmodule Events.Clock do
   defp query_clock(:now, client, t, _, _), do: send(client, {:time, t})
   defp query_clock(:events, client, _, eq, _), do: send(client, {:events, eq})
   defp query_clock(:state, client, _, _, s), do: send(client, {:state, s})
-
-  defp exec_events([f], clk), do: send(clk, {:next, [f.(clk)]})
-  defp exec_events([], clk), do: send(clk, {:next, []})
-
-  defp exec_events(fs, clk) do
-    tasks = Enum.map(fs, fn f -> Task.async(fn -> f.(clk) end) end)
-    {:next, Task.await_many(tasks)}
-  end
 end

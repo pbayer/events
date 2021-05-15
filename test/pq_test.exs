@@ -11,14 +11,6 @@ defmodule PQTest do
     PQ.add(fn pid -> send(pid, 3) end, 2.0, nil, eq)
   end
 
-  def flush(acc \\ []) do
-    receive do
-      msg -> flush(acc ++ [msg])
-    after
-      0 -> acc
-    end
-  end
-
   test "Event queue creation" do
     %{no: no, evts: evts, psq: psq} = PQ.new()
     assert no == 0
@@ -50,13 +42,13 @@ defmodule PQTest do
     assert t == 1.0
     assert length(fs) == 2
     assert length(Map.keys(eq.evts)) == 1
-    assert flush() == [1, 2]
+    assert Utils.flush() == [1, 2]
     {t, fs, eq} = PQ.next(eq)
     Enum.each(fs, fn f -> f.(me) end)
     assert t == 2.0
     assert length(fs) == 1
     assert eq.evts == %{}
-    assert flush() == [3]
+    assert Utils.flush() == [3]
   end
 
   test "Execute with repeated event" do
@@ -68,19 +60,19 @@ defmodule PQTest do
     assert t == 1.0
     assert length(fs) == 2
     assert length(Map.keys(eq.evts)) == 2
-    assert flush() == [1, 2]
+    assert Utils.flush() == [1, 2]
     {t, fs, eq} = PQ.next(eq)
     Enum.each(fs, fn f -> f.(me) end)
     assert t == 2.0
     assert length(fs) == 2
     assert length(Map.keys(eq.evts)) == 1
-    assert flush() == [3, 2]
+    assert Utils.flush() == [3, 2]
     {t, fs, eq} = PQ.next(eq)
     Enum.each(fs, fn f -> f.(me) end)
     assert t == 3.0
     assert length(fs) == 1
     assert length(Map.keys(eq.evts)) == 1
-    assert flush() == [2]
+    assert Utils.flush() == [2]
     # delete repeated event
     eq = PQ.delete(2, eq)
     {t, fs, eq} = PQ.next(eq)
@@ -88,6 +80,6 @@ defmodule PQTest do
     assert eq.evts == %{}
     assert t == 4.0
     assert length(fs) == 0
-    assert flush() == []
+    assert Utils.flush() == []
   end
 end
