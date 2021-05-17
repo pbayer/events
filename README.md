@@ -3,7 +3,7 @@
 Discrete event simulation (DES) framework in Elixir.
 
 [![Elixir CI](https://github.com/pbayer/events/actions/workflows/ci.yml/badge.svg)](https://github.com/pbayer/events/actions/workflows/ci.yml)
-[![Coverage Status](https://coveralls.io/repos/github/pbayer/events/badge.svg?branch=master)](https://coveralls.io/github/pbayer/events?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/pbayer/events/badge.svg?branch=master&kill_cache=1)](https://coveralls.io/github/pbayer/events?branch=master)
 
 With Elixir as an [actor](https://en.wikipedia.org/wiki/Actor_model) language based on the [BEAM](https://en.wikipedia.org/wiki/BEAM_(Erlang_virtual_machine)) `Events`
 
