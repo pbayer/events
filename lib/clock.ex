@@ -202,8 +202,8 @@ defmodule Events.Clock do
         ctrl_clock(caller, command, arg, {t, eq, s})
 
       # handle next event
-      {:next, _} ->
-        handle_next(t, eq, s)
+      {:next, res} ->
+        handle_next(t, eq, s, res)
 
       msg ->
         IO.puts("Clock #{self()} undefined message #{msg}")
@@ -217,6 +217,12 @@ defmodule Events.Clock do
   defp manage_event(caller, :add, evt, t, eq) do
     eq = add_event(evt, t, eq)
     send(caller, {:ok, eq.no})
+    eq
+  end
+
+  defp manage_event(caller, :update, {no, item, arg}, _, eq) do
+    eq = PQ.update(no, item, arg, eq)
+    send(caller, {:ok, no})
     eq
   end
 
@@ -305,17 +311,17 @@ defmodule Events.Clock do
     send(clk, {:next, Task.await_many(tasks)})
   end
 
-  defp handle_next(t, eq, %{state: :stopped} = s) do
+  defp handle_next(t, eq, %{state: :stopped} = s, _) do
     send(s.client, {:stopped, %{events: s.evcount, time: t}})
     clock_unit(t, eq, %{s | state: :idle})
   end
 
-  defp handle_next(t, eq, %{state: :idle} = s) do
-    send(s.client, {:ok, %{events: s.evcount, time: t}})
+  defp handle_next(t, eq, %{state: :idle} = s, res) do
+    send(s.client, {:ok, %{events: length(res), time: t}})
     clock_unit(t, eq, s)
   end
 
-  defp handle_next(t, eq, s) do
+  defp handle_next(t, eq, s, _) do
     if t >= s.tend || eq.psq == nil do
       t = max(s.tend, t)
       send(s.client, {:done, %{events: s.evcount, time: t}})
