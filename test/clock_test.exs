@@ -7,7 +7,7 @@ defmodule ClockTest do
 
   def setup() do
     me = self()
-    clk = Clock.new()
+    clk = Clock.clock()
     fun = fn c -> send(me, Clock.now(c)) end
 
     Enum.each([1, 1, 2, 4], fn t ->

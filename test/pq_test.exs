@@ -32,6 +32,15 @@ defmodule PQTest do
     assert eq == testset()
     %{evts: evts} = PQ.update(2, :cycle, 1.0, eq)
     assert evts[2].c == 1.0
+    f1 = fn _ -> 1 end
+    %{evts: evts} = PQ.update(3, :fun, f1, eq)
+    assert evts[3].f == f1
+    eq1 = PQ.update(1, :time, 3, eq)
+    assert :psq.psq_size(eq1.psq) == 3
+    {:just, {_, ev}} = :psq.lookup(3000, eq1.psq)
+    assert ev.ens == [1]
+    assert ev.t == 3
+    assert eq1.evts[1].t == 3
   end
 
   test "Execute next event" do

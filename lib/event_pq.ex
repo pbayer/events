@@ -57,6 +57,7 @@ defmodule Events.PQ do
   Note: You can extract the generated event number as the
   `eq.no`-field of the returned event queue `eq`.
   """
+  @spec add(fun, number, number, event_queue) :: event_queue
   def add(f, t, c, eq) do
     n = eq.no + 1
     ev = %PQ{t: t, f: f, c: c}
@@ -67,9 +68,47 @@ defmodule Events.PQ do
   Update event number `no` with
 
   - `:cycle`: update the event repeat cycle,
+  - `:fun`: update the event function,
+  - `:time`: update the event time
   """
-  @spec update(non_neg_integer, atom, number, map) :: map
+  @spec update(pos_integer, :cycle, number, event_queue) :: event_queue
   def update(no, :cycle, cy, eq), do: update_eq(no, :c, cy, eq)
+
+  @spec update(pos_integer, :fun, fun, event_queue) :: event_queue
+  def update(no, :fun, f, eq), do: update_eq(no, :f, f, eq)
+
+  @spec update(pos_integer, :time, number, event_queue) :: event_queue
+  def update(no, :time, t, eq) do
+    t_old = eq.evts[no].t
+    kp = key(t_old)
+    eq = update_eq(no, :t, t, eq)
+
+    case :psq.lookup(kp, eq.psq) do
+      {:just, {k, %{ens: ens}}} ->
+        psq =
+          if length(ens) <= 1 do
+            :psq.delete(k, eq.psq)
+          else
+            ens = Enum.reject(ens, fn x -> x == no end)
+
+            {:ok, psq} =
+              :psq.alter(
+                fn
+                  mv -> update_psq(mv, kp, ens, t)
+                end,
+                kp,
+                eq.psq
+              )
+
+            psq
+          end
+
+        %{eq | psq: add_psq(no, t, psq)}
+
+      :nothing ->
+        eq
+    end
+  end
 
   defp update_eq(no, key, value, eq) do
     %{no: _, evts: evts, psq: _} = eq
@@ -84,14 +123,22 @@ defmodule Events.PQ do
     end
   end
 
+  # calculate a key from a time
+  defp key(t), do: trunc(t * @resolution)
+
+  # add event number n at time t to a psq
   defp add_psq(n, t, psq) do
-    kp = trunc(t * @resolution)
+    kp = key(t)
     {:ok, psq2} = :psq.alter(fn mv -> update_psq(mv, kp, n, t) end, kp, psq)
     psq2
   end
 
   defp update_psq(:nothing, prio, n, t) do
     {:ok, {:just, {prio, %{t: t, ens: [n]}}}}
+  end
+
+  defp update_psq({:just, {_, ev}}, prio, ens, _) when is_list(ens) do
+    {:ok, {:just, {prio, %{ev | ens: ens}}}}
   end
 
   defp update_psq({:just, {_, ev}}, prio, n, _) do

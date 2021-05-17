@@ -1,11 +1,15 @@
 # Events
 
-Discrete event simulation framework in Elixir.
+Discrete event simulation (DES) framework in Elixir.
 
 [![Elixir CI](https://github.com/pbayer/events/actions/workflows/ci.yml/badge.svg)](https://github.com/pbayer/events/actions/workflows/ci.yml)
 [![Coveralls](https://coveralls.io/repos/github/pbayer/events/badge.svg?branch=master)](https://coveralls.io/github/pbayer/events?branch=master)
 
-With Elixir an actor language based on the [BEAM (Erlang virtual machine)](https://en.wikipedia.org/wiki/BEAM_(Erlang_virtual_machine)) it can handle thousands of concurrent entities in a simulation.
+With Elixir as an [actor](https://en.wikipedia.org/wiki/Actor_model) language based on the [BEAM](https://en.wikipedia.org/wiki/BEAM_(Erlang_virtual_machine)) `Events`
+
+- can handle thousands of concurrent entities in a simulation,
+- allows to model them as actors and
+- integrates the event-, activity- and process-based approaches to DES in one simple actor-framework.
 
 ## Installation
 
